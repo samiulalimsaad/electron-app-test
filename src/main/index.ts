@@ -5,7 +5,11 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon.png?asset'
 import { startExpressServer } from '../express/server'
-import './download'
+// import './download'
+
+import { Downloader } from './lib/Downloader'
+
+new Downloader()
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
