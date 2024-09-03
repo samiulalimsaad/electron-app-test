@@ -1,4 +1,5 @@
 // renderer.tsx
+import { assert } from 'console'
 import React, { useEffect, useState } from 'react'
 
 const Download: React.FC = () => {
@@ -38,6 +39,12 @@ const Download: React.FC = () => {
     }
   }, [])
 
+  const handleDefaultDownloadLocation = async (): Promise<void> => {
+    const path = await window.electron.ipcRenderer.invoke('set-default-download-path')
+    if (path) {
+      alert('Default download path set to  ' + path)
+    }
+  }
   const startDownload = (): void => {
     window.electron.ipcRenderer.invoke('start-download', link)
   }
@@ -72,6 +79,7 @@ const Download: React.FC = () => {
       <progress value={progress} max="100" style={{ width: '100%' }} />
 
       <div>
+        <button onClick={handleDefaultDownloadLocation}>Set Download Location</button>
         <button onClick={startDownload} disabled={progress > 0 && !isPaused}>
           Start Download
         </button>

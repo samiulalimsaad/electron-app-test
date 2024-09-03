@@ -1,6 +1,6 @@
 // main.ts
 import axios from 'axios'
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { clearInterval } from 'timers'
@@ -11,7 +11,15 @@ let downloadedLength = 0
 let totalLength = 0
 let downloadUrl = ''
 let writeStream: fs.WriteStream | null = null
-import { loadDownloadState, saveDownloadState, clearDownloadState } from './db-sqlite/index'
+import {
+  loadDownloadState,
+  saveDownloadState,
+  clearDownloadState,
+  saveDefaultDownloadPath,
+  getDefaultDownloadPath,
+  clearAllDownloadProgress
+} from './db-sqlite/index'
+import getUniquePath from './utils/getUniquePath'
 
 const progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
 interface DownloadState {
@@ -22,6 +30,7 @@ interface DownloadState {
 let tout: NodeJS.Timeout
 let shouldSend = false
 
+clearAllDownloadProgress()
 function startPauseResume(): void {
   if (tout) clearInterval(tout)
   tout = setInterval(() => {
@@ -112,12 +121,21 @@ async function startDownload(mainWindow: BrowserWindow | null): Promise<void> {
       ? parseInt(response.headers['content-length']) + downloadedLength
       : totalLength
 
-    writeStream = fs.createWriteStream(
-      path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4'),
-      {
-        flags: 'a'
+    let downloadPath = getDefaultDownloadPath()
+    if (downloadPath) {
+      downloadPath = getUniquePath(downloadPath)
+    } else {
+      downloadPath = path.resolve(path.join(app.getPath('userData'), 'downloadedVideo'))
+      if (!fs.existsSync(downloadPath)) {
+        fs.mkdirSync(downloadPath)
       }
-    )
+
+      downloadPath = getUniquePath(path.join(downloadPath, 'downloadedVideo.mp4'))
+    }
+
+    writeStream = fs.createWriteStream(downloadPath as string, {
+      flags: 'a'
+    })
 
     response.data.on('data', (chunk) => {
       if (isPaused || isCancelled) {
@@ -146,11 +164,14 @@ async function startDownload(mainWindow: BrowserWindow | null): Promise<void> {
 
         clearDownloadState(downloadUrl)
         mainWindow.webContents.send('download-cancelled')
-        saveDownloadState(downloadUrl, downloadedLength, totalLength)
+        loadProgress()
+        // saveDownloadState(downloadUrl, downloadedLength, totalLength)
       } else if (!isPaused) {
         writeStream?.close()
         mainWindow.webContents.send('download-complete')
-        saveDownloadState(downloadUrl, downloadedLength, totalLength)
+        clearDownloadState(downloadUrl)
+        loadProgress()
+        // saveDownloadState(downloadUrl, downloadedLength, totalLength)
       }
     })
   } catch (error) {
@@ -178,6 +199,31 @@ ipcMain.handle('resume-download', () => {
 ipcMain.handle('cancel-download', () => {
   isCancelled = true
   isPaused = false
-  saveDownloadState(downloadUrl, downloadedLength, totalLength)
+  // saveDownloadState(downloadUrl, downloadedLength, totalLength)
   clearInterval(tout)
+})
+
+ipcMain.handle('select-save-path', async () => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Save Video',
+    defaultPath: 'sakib.mp4',
+    filters: [{ name: 'Videos', extensions: ['mp4'] }]
+  })
+  return canceled ? null : filePath
+})
+
+ipcMain.handle('set-default-download-path', async () => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Save Video',
+    defaultPath: 'sakib.mp4',
+    filters: [{ name: 'Videos', extensions: ['mp4'] }]
+  })
+  if (filePath) saveDefaultDownloadPath(filePath)
+  return canceled ? null : filePath
+})
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
 })

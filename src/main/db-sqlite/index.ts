@@ -10,6 +10,8 @@ const dbForDownloadLocation = new Database(path.join(app.getPath('userData'), 'v
 // set download progress in this database
 const dbForDownloadProgress = new Database(path.join(app.getPath('userData'), 'downloads.db'))
 
+const dbForDownloadPath = new Database(path.join(app.getPath('userData'), 'downloadpath.db'))
+
 // update donwload state when finished
 export const setDownCompleteState = (mainWindow: Electron.BrowserWindow): void => {
   mainWindow.webContents.on('did-finish-load', () => {
@@ -47,25 +49,27 @@ dbForDownloadLocation
   )
   .run()
 
-// db.prepare(
-//   `
-//   CREATE TABLE IF NOT EXISTS settings (
-//     id INTEGER PRIMARY KEY AUTOINCREMENT,
-//     defaultDownloadPath TEXT
-//   )
-// `
-// ).run()
+dbForDownloadPath
+  .prepare(
+    `
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    defaultDownloadPath TEXT
+  )
+`
+  )
+  .run()
 
 // Save default download path
 export function saveDefaultDownloadPath(downloadPath: string): void {
-  const setting = dbForDownloadLocation.prepare('SELECT * FROM settings WHERE id = 1').get()
+  const setting = dbForDownloadPath.prepare('SELECT * FROM settings WHERE id = 1').get()
 
   if (setting) {
-    dbForDownloadLocation
+    dbForDownloadPath
       .prepare(`UPDATE settings SET defaultDownloadPath = ? WHERE id = 1`)
       .run(downloadPath)
   } else {
-    dbForDownloadLocation
+    dbForDownloadPath
       .prepare(`INSERT INTO settings (id, defaultDownloadPath) VALUES (1, ?)`)
       .run(downloadPath)
   }
@@ -73,7 +77,7 @@ export function saveDefaultDownloadPath(downloadPath: string): void {
 
 // Get default download path
 export function getDefaultDownloadPath(): string | null {
-  const setting = dbForDownloadLocation
+  const setting = dbForDownloadPath
     .prepare('SELECT defaultDownloadPath FROM settings WHERE id = 1')
     .get()
   return setting ? (setting as { defaultDownloadPath: string }).defaultDownloadPath : null
@@ -105,6 +109,10 @@ export function loadDownloadState(downloadUrl: string): unknown {
   return dbForDownloadProgress
     .prepare(`SELECT * FROM downloads WHERE downloadUrl = ?`)
     .get(downloadUrl)
+}
+
+export function clearAllDownloadProgress(): unknown {
+  return dbForDownloadProgress.prepare(`SELECT * FROM downloads `).get()
 }
 
 // Function to clear the download state from the database
