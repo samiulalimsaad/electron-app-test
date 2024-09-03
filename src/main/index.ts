@@ -11,7 +11,8 @@ import { Downloader } from './lib/Downloader'
 
 ipcMain.handle(`request-download`, async (_, id: string) => {
   console.log('listener activating: ', { id })
-  new Downloader().init(id)
+  const { init } = new Downloader()
+  init(id)
 })
 
 Sentry.init({

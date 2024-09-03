@@ -13,10 +13,19 @@ export class Downloader {
   private totalLength = 0
   private downloadUrl = ''
   private writeStream: fs.WriteStream | null = null
-  private progressFile = path.join(this.basePath, 'progress', 'downloadProgress.json')
+  private progressDir = path.join(this.basePath, 'progress')
+  private progressFile = ''
+
+  private videoDir = path.join(this.basePath, 'videos')
+  private videoFile = ''
 
   private tout: NodeJS.Timeout | undefined = undefined
   private shouldSend = false
+
+  constructor() {
+    this.mkDir(this.videoDir)
+    this.mkDir(this.progressDir)
+  }
 
   init(id = ''): void {
     this.postfix = id
@@ -25,6 +34,9 @@ export class Downloader {
     this.resumeDownloadListener()
     this.pauseDownloadListener()
     this.cancelDownloadListener()
+    this.progressFile = path.join(this.progressDir, `${this.postfix}.json`)
+
+    this.mkFile(this.progressFile)
     setTimeout(() => {
       this.loadProgress()
       this.previousProgress()
@@ -132,12 +144,10 @@ export class Downloader {
         ? parseInt(response.headers['content-length']) + this.downloadedLength
         : this.totalLength
 
-      this.writeStream = fs.createWriteStream(
-        path.join(this.basePath, 'videos', 'downloadedFile.mp4'),
-        {
-          flags: 'a'
-        }
-      )
+      this.videoFile = path.join(this.videoDir, `${this.postfix}.mp4`)
+      this.writeStream = fs.createWriteStream(this.videoFile, {
+        flags: 'a'
+      })
 
       response.data.on('data', (chunk) => {
         if (this.isPaused || this.isCancelled) {
@@ -167,18 +177,18 @@ export class Downloader {
         if (this.isCancelled) {
           this.writeStream?.close()
           fs.unlinkSync(path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4')) // Delete incomplete file if canceled
-          mainWindow?.webContents.send('download-cancelled')
+          mainWindow?.webContents.send(`download-cancelled-${this.postfix}`)
           this.saveProgress()
           this.flush()
         } else if (!this.isPaused) {
           this.writeStream?.close()
-          mainWindow?.webContents.send('download-complete')
+          mainWindow?.webContents.send(`download-complete-${this.postfix}`)
           this.saveProgress()
         }
       })
     } catch (error) {
       console.error('Download failed:', error)
-      mainWindow?.webContents.send('download-error', error.message)
+      mainWindow?.webContents.send(`download-error-${this.postfix}`, error.message)
       this.saveProgress()
       this.flush()
     }
@@ -223,6 +233,35 @@ export class Downloader {
       mainWindow?.webContents.send(`download-progress-${this.postfix}`, parseFloat('0'))
       this.saveProgress()
       this.flush()
+      this.rmFile(this.progressFile)
+      this.rmFile(this.videoFile)
     })
+  }
+
+  private mkDir(dirPath: string): void {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath)
+      console.log('Directory created!')
+    } else {
+      console.log('Directory already exists.')
+    }
+  }
+
+  private mkFile(filePath: string): void {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, '')
+      console.log('File created!')
+    } else {
+      console.log('File already exists.')
+    }
+  }
+
+  private rmFile(filePath: string): void {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath) // Remove the file
+      console.log('File removed!')
+    } else {
+      console.log('File does not exist.')
+    }
   }
 }
