@@ -1,6 +1,8 @@
 // renderer.tsx
 import React, { useEffect, useState } from 'react'
 
+const id = '123456789'
+
 const Download: React.FC = () => {
   const [progress, setProgress] = useState<number>(0)
   const [isPaused, setIsPaused] = useState<boolean>(false)
@@ -10,50 +12,51 @@ const Download: React.FC = () => {
   )
 
   useEffect(() => {
+    window.electron.ipcRenderer.invoke(`request-download`, id)
     // Listen for download progress updates
-    window.electron.ipcRenderer.on('download-progress', (_, p: number) => {
+    window.electron.ipcRenderer.on(`download-progress-${id}`, (_, p: number) => {
       //   console.log(p)
       setProgress(p)
     })
 
-    window.electron.ipcRenderer.on('download-complete', () => {
+    window.electron.ipcRenderer.on(`download-complete-${id}`, () => {
       setProgress(100)
       alert('Download Complete')
     })
 
-    window.electron.ipcRenderer.on('download-cancelled', () => {
+    window.electron.ipcRenderer.on(`download-cancelled-${id}`, () => {
       alert('Download Cancelled')
     })
 
-    window.electron.ipcRenderer.on('download-error', (_, error: string) => {
+    window.electron.ipcRenderer.on(`download-error-${id}`, (_, error: string) => {
       alert(`Download Error: ${error}`)
     })
 
     // Cleanup listeners on unmount
     return (): void => {
-      window.electron.ipcRenderer.removeAllListeners('download-progress')
-      window.electron.ipcRenderer.removeAllListeners('download-complete')
-      window.electron.ipcRenderer.removeAllListeners('download-cancelled')
-      window.electron.ipcRenderer.removeAllListeners('download-error')
+      window.electron.ipcRenderer.removeAllListeners(`download-progress-${id}`)
+      window.electron.ipcRenderer.removeAllListeners(`download-complete-${id}`)
+      window.electron.ipcRenderer.removeAllListeners(`download-cancelled-${id}`)
+      window.electron.ipcRenderer.removeAllListeners(`download-error-${id}`)
     }
   }, [])
 
   const startDownload = (): void => {
-    window.electron.ipcRenderer.invoke('start-download', link)
+    window.electron.ipcRenderer.invoke(`start-download-${id}`, link)
   }
 
   const pauseDownload = (): void => {
-    window.electron.ipcRenderer.invoke('pause-download')
+    window.electron.ipcRenderer.invoke(`pause-download-${id}`)
     setIsPaused(true)
   }
 
   const resumeDownload = (): void => {
-    window.electron.ipcRenderer.invoke('resume-download')
+    window.electron.ipcRenderer.invoke(`resume-download-${id}`)
     setIsPaused(false)
   }
 
   const cancelDownload = (): void => {
-    window.electron.ipcRenderer.invoke('cancel-download')
+    window.electron.ipcRenderer.invoke(`cancel-download-${id}`)
   }
   console.log({ progress })
   return (
