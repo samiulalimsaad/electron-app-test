@@ -11,8 +11,14 @@ let downloadedLength = 0
 let totalLength = 0
 let downloadUrl = ''
 let writeStream: fs.WriteStream | null = null
-const progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
+import { loadDownloadState, saveDownloadState, clearDownloadState } from './db-sqlite/index'
 
+const progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
+interface DownloadState {
+  downloadUrl: string
+  downloadedLength: number
+  totalLength: number
+}
 let tout: NodeJS.Timeout
 let shouldSend = false
 
@@ -23,34 +29,39 @@ function startPauseResume(): void {
   }, 1000)
 }
 
-function saveProgress(): void {
-  const progressData = {
-    downloadedLength,
-    downloadUrl,
-    totalLength
-  }
-  fs.writeFileSync(progressFile, JSON.stringify(progressData))
-}
+// function saveProgress(): void {
+//   const progressData = {
+//     downloadedLength,
+//     downloadUrl,
+//     totalLength
+//   }
+//   fs.writeFileSync(progressFile, JSON.stringify(progressData))
+// }
 
 // Helper to load progress from a file
 function loadProgress(): void {
-  if (!fs.existsSync(progressFile)) {
-    fs.writeFileSync(
-      progressFile,
-      JSON.stringify({
-        downloadedLength: 0,
-        downloadUrl: '',
-        totalLength: 0
-      })
-    )
-  }
-  const progressData = fs.readFileSync(progressFile, 'utf8')
-  console.log({ progressData })
   const {
-    downloadedLength: savedLength,
     downloadUrl: savedUrl,
+    downloadedLength: savedLength,
     totalLength: savedTotal
-  } = JSON.parse(progressData || '{}')
+  } = (loadDownloadState(downloadUrl) as DownloadState) || {}
+  // if (!fs.existsSync(progressFile)) {
+  //   fs.writeFileSync(
+  //     progressFile,
+  //     JSON.stringify({
+  //       downloadedLength: 0,
+  //       downloadUrl: '',
+  //       totalLength: 0
+  //     })
+  //   )
+  // }
+  // const progressData = fs.readFileSync(progressFile, 'utf8')
+  // console.log({ progressData })
+  // const {
+  //   downloadedLength: savedLength,
+  //   downloadUrl: savedUrl,
+  //   totalLength: savedTotal
+  // } = JSON.parse(progressData || '{}')
   downloadedLength = savedLength || 0
   downloadUrl = savedUrl
   totalLength = savedTotal || 0
@@ -117,7 +128,6 @@ async function startDownload(mainWindow: BrowserWindow | null): Promise<void> {
       downloadedLength += chunk.length
       const progressPercentage = ((downloadedLength / totalLength) * 100).toFixed(2)
       console.log({ progressPercentage })
-      saveProgress()
 
       //   if (tout) clearInterval(tout)
       // Send progress to renderer
@@ -132,26 +142,28 @@ async function startDownload(mainWindow: BrowserWindow | null): Promise<void> {
       mainWindow.webContents.send('download-progress', parseFloat('100'))
       if (isCancelled) {
         writeStream?.close()
-        fs.unlinkSync(path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4')) // Delete incomplete file if canceled
+        // fs.unlinkSync(path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4')) // Delete incomplete file if canceled
+
+        clearDownloadState(downloadUrl)
         mainWindow.webContents.send('download-cancelled')
-        saveProgress()
+        saveDownloadState(downloadUrl, downloadedLength, totalLength)
       } else if (!isPaused) {
         writeStream?.close()
         mainWindow.webContents.send('download-complete')
-        saveProgress()
+        saveDownloadState(downloadUrl, downloadedLength, totalLength)
       }
     })
   } catch (error) {
     console.error('Download failed:', error)
     mainWindow?.webContents.send('download-error', error.message)
-    saveProgress()
+    saveDownloadState(downloadUrl, downloadedLength, totalLength)
   }
 }
 
 // Handle pause
 ipcMain.handle('pause-download', () => {
   isPaused = true
-  saveProgress()
+  saveDownloadState(downloadUrl, downloadedLength, totalLength)
   clearInterval(tout)
 })
 
@@ -166,6 +178,6 @@ ipcMain.handle('resume-download', () => {
 ipcMain.handle('cancel-download', () => {
   isCancelled = true
   isPaused = false
-  saveProgress()
+  saveDownloadState(downloadUrl, downloadedLength, totalLength)
   clearInterval(tout)
 })
