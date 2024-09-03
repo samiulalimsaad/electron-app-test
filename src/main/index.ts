@@ -9,7 +9,10 @@ import { startExpressServer } from '../express/server'
 
 import { Downloader } from './lib/Downloader'
 
-new Downloader()
+ipcMain.handle(`request-download`, async (_, id: string) => {
+  console.log('listener activating: ', { id })
+  new Downloader().init(id)
+})
 
 Sentry.init({
   dsn: import.meta.env.VITE_SENTRY_DSN,
