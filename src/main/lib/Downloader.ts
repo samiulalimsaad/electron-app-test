@@ -2,30 +2,44 @@ import axios from 'axios'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import { clearInterval } from 'timers'
 
 export class Downloader {
+  private basePath = app.getAppPath()
+  private postfix = ''
+
   private isPaused = false
   private isCancelled = false
   private downloadedLength = 0
   private totalLength = 0
   private downloadUrl = ''
   private writeStream: fs.WriteStream | null = null
-  private progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
+  private progressFile = path.join(this.basePath, 'progress', 'downloadProgress.json')
 
   private tout: NodeJS.Timeout | undefined = undefined
   private shouldSend = false
 
-  constructor() {
+  init(id = ''): void {
+    this.postfix = id
     console.log('constructor')
     this.startDownloadListener()
     this.resumeDownloadListener()
+    this.pauseDownloadListener()
     this.cancelDownloadListener()
-    // this.loadProgress()
     setTimeout(() => {
       this.loadProgress()
       this.previousProgress()
     }, 1000)
+  }
+
+  private flush(): void {
+    console.log('removing listerers')
+    this.writeStream?.close()
+    ipcMain.removeAllListeners(`start-download-${this.postfix}`)
+    ipcMain.removeAllListeners(`download-progress-${this.postfix}`)
+    ipcMain.removeAllListeners(`download-cancel-${this.postfix}`)
+    ipcMain.removeAllListeners(`download-pause-${this.postfix}`)
+    ipcMain.removeAllListeners(`download-resume-${this.postfix}`)
+    clearInterval(this.tout)
   }
 
   private startPauseResume(): void {
@@ -86,7 +100,10 @@ export class Downloader {
 
     const mainWindow = BrowserWindow.getFocusedWindow()
     if (!mainWindow) return
-    mainWindow?.webContents.send('download-progress', parseFloat(progressPercentage) || 0)
+    mainWindow?.webContents.send(
+      `download-progress-${this.postfix}`,
+      parseFloat(progressPercentage) || 0
+    )
   }
 
   private async startDownload(): Promise<void> {
@@ -116,7 +133,7 @@ export class Downloader {
         : this.totalLength
 
       this.writeStream = fs.createWriteStream(
-        path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4'),
+        path.join(this.basePath, 'videos', 'downloadedFile.mp4'),
         {
           flags: 'a'
         }
@@ -136,19 +153,23 @@ export class Downloader {
         //   if (tout) clearInterval(tout)
         // Send progress to renderer
         if (this.shouldSend) {
-          mainWindow?.webContents.send('download-progress', parseFloat(progressPercentage))
+          mainWindow?.webContents.send(
+            `download-progress-${this.postfix}`,
+            parseFloat(progressPercentage)
+          )
           this.shouldSend = false
         }
         this.writeStream?.write(chunk)
       })
 
       response.data.on('end', () => {
-        mainWindow?.webContents.send('download-progress', parseFloat('100'))
+        mainWindow?.webContents.send(`download-progress-${this.postfix}`, parseFloat('100'))
         if (this.isCancelled) {
           this.writeStream?.close()
           fs.unlinkSync(path.join(app.getAppPath(), 'videos', 'downloadedFile.mp4')) // Delete incomplete file if canceled
           mainWindow?.webContents.send('download-cancelled')
           this.saveProgress()
+          this.flush()
         } else if (!this.isPaused) {
           this.writeStream?.close()
           mainWindow?.webContents.send('download-complete')
@@ -159,12 +180,13 @@ export class Downloader {
       console.error('Download failed:', error)
       mainWindow?.webContents.send('download-error', error.message)
       this.saveProgress()
+      this.flush()
     }
   }
 
   startDownloadListener(): void {
     console.log('start download listener')
-    ipcMain.handle('start-download', async (event, url: string) => {
+    ipcMain.handle(`start-download-${this.postfix}`, async (event, url: string) => {
       console.log('listener activated: ', { url })
       this.downloadUrl = url
       this.isPaused = false
@@ -176,7 +198,7 @@ export class Downloader {
   }
 
   pauseDownloadListener(): void {
-    ipcMain.handle('pause-download', () => {
+    ipcMain.handle(`pause-download-${this.postfix}`, () => {
       this.isPaused = true
       this.saveProgress()
       clearInterval(this.tout)
@@ -184,7 +206,7 @@ export class Downloader {
   }
 
   resumeDownloadListener(): void {
-    ipcMain.handle('resume-download', () => {
+    ipcMain.handle(`resume-download-${this.postfix}`, () => {
       this.isPaused = false
       this.startPauseResume()
       this.startDownload()
@@ -192,11 +214,15 @@ export class Downloader {
   }
 
   cancelDownloadListener(): void {
-    ipcMain.handle('cancel-download', () => {
+    ipcMain.handle(`cancel-download-${this.postfix}`, () => {
+      const mainWindow = BrowserWindow.getFocusedWindow()
       this.isCancelled = true
       this.isPaused = false
+      this.downloadedLength = 0
+      this.totalLength = 0
+      mainWindow?.webContents.send(`download-progress-${this.postfix}`, parseFloat('0'))
       this.saveProgress()
-      clearInterval(this.tout)
+      this.flush()
     })
   }
 }
