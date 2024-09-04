@@ -21,7 +21,7 @@ import {
 } from './db-sqlite/index'
 import getUniquePath from './utils/getUniquePath'
 
-const progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
+// const progressFile = path.join(app.getAppPath(), 'progress', 'downloadProgress.json')
 interface DownloadState {
   downloadUrl: string
   downloadedLength: number
@@ -95,6 +95,7 @@ setTimeout(() => {
 
 // Handle download requests
 ipcMain.handle('start-download', async (event, url: string) => {
+  console.log(event)
   downloadUrl = url
   isPaused = false
   isCancelled = false
@@ -176,7 +177,7 @@ async function startDownload(mainWindow: BrowserWindow | null): Promise<void> {
     })
   } catch (error) {
     console.error('Download failed:', error)
-    mainWindow?.webContents.send('download-error', error.message)
+    mainWindow?.webContents.send('download-error', error)
     saveDownloadState(downloadUrl, downloadedLength, totalLength)
   }
 }

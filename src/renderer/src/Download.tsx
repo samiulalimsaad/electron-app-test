@@ -1,5 +1,5 @@
 // renderer.tsx
-import { assert } from 'console'
+// import { assert } from 'console'
 import React, { useEffect, useState } from 'react'
 
 const Download: React.FC = () => {

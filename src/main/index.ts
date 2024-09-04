@@ -1,16 +1,16 @@
-import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import * as Sentry from '@sentry/electron/main'
 import downstreamElectron from 'downstream-electron'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon.png?asset'
-import { startExpressServer } from '../express/server'
+// import { startExpressServer } from '../express/server'
 import './download'
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  debug: true
-})
+// Sentry.init({
+//   dsn: import.meta.env.VITE_SENTRY_DSN,
+//   debug: true
+// })
 
 export let mainWindow: BrowserWindow
 
@@ -73,18 +73,24 @@ function createWindow(): void {
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  //   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  //     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  //   } else {
+  //     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  //   }
+  // }
+
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.loadURL('http://localhost:5173')
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
-
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  startExpressServer()
+  // startExpressServer()
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -143,6 +149,7 @@ if (!isSingleInstance) {
 
 // Behaviour on second instance for parent process- Pretty much optional
 app.on('second-instance', (event, argv, cwd) => {
+  console.log(event, argv, cwd)
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
